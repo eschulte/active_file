@@ -1,5 +1,3 @@
-<!-- -*- mode:markdown -*- -->
-
 ActiveFile
 ==========
 
