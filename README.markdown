@@ -8,6 +8,9 @@ RESTful resources.
 Installation
 ============
 
+To install, run the following from inside of your rails project.
+
+> ruby script/plugin install git://github.com/eschulte/active_file.git
 
 Example
 =======
