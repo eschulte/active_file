@@ -1,4 +1,5 @@
 require 'test/unit'
+require File.join(File.dirname(__FILE__), "..", "lib", 'active_file')
 
 class ActiveFileTest < Test::Unit::TestCase
   

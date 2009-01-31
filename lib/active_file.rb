@@ -69,57 +69,20 @@
 #  Boston, MA 02111-1307, USA.
 #
 module ActiveFile
-  
+
   # for acts as stuffs
   module Acts end
-  
+
   # Generic Active File exception class.
   class ActiveFileError < StandardError
   end
-  
+
   class ActiveFileAssociationError < StandardError
   end
-  
-  class Base < Dir
-    attr_accessor :path, :body, :attributes
 
-    # create (but don't save) and return a new instance
-    def initialize(attributes = {})
-      self.attributes = self.class.generate_attributes(attributes[:path])
-      self.apply_attributes(attributes)
-    end
-    
-    def update_attributes(attributes = {})
-      old_path = self.path
-      self.apply_attributes(attributes)
-      self.class.delete(old_path)
-      self.write
-    end
-    
-    def apply_attributes(attributes = {})
-      attributes.each do |key, value|
-        self.send("#{key}=", value) if (self.respond_to?("#{key}=") or
-                                        self.class.location_attributes.include?(key.to_s.intern))
-      end
-      self
-    end
-    
-    # dynamically add methods attr_accessor type methods for every key
-    # in the attributes hash
-    def method_missing(id, *args)
-      set = id.to_s.include?("=")
-      id = id.to_s.sub("=","").sub(" ","").intern
-      if @attributes.keys.include?(id)
-        if set
-          @attributes[id] = args[0]
-          self.path = self.class.refresh_path(self) if self.path or self.class.generate_path(self)
-        else
-          @attributes[id]
-        end
-      else
-        super(id, args)
-      end
-    end
+  class Base < Dir
+    # used when converting paths to id's for use in url construction
+    ACTIVEFILE_EXTENSION_ALT = "_"
 
     # hook run whenever a new class inherits from ActiveFile::Base
     def self.inherited(base)
@@ -197,19 +160,19 @@ module ActiveFile
       def location_attributes() @location_attributes end
 
       # This is used instead of a cattr_accessor because we want to
-      # chdir into the directory whenever it is changed
+      # make sure that the directory exists and is a directory
       def base_directory=(directory)
         FileUtils.mkdir_p(directory)
         raise ActiveFileError.new("#{directory} is not a directory") unless FileTest.directory?(directory)
-        @base_directory = directory
         self.chdir(directory)
+        @base_directory = directory
       end
       def base_directory() @base_directory end
 
       # Expand path to the absolute path inside of DOCUMENT_ROOT.  The
       # resulting path is used directly for creating, reading,
       # updating and deleting files.
-      def expand(path) File.join(self.pwd, path) end
+      def expand(path) File.join(self.base_directory, path) end
 
       # check if a file exists at location
       def exist?(path) path if File.exist?(self.expand(path)) end
@@ -231,10 +194,10 @@ module ActiveFile
         end
       end
       alias :get :instance
-      
+
       def all() self.find(:all) end
       def first() self.find(:first) end
-      
+
       # TODO: document
       def find(spec, options = {})
         if spec == :all
@@ -300,34 +263,36 @@ module ActiveFile
       def update_path(record)
         # If record doesn't have a path, then try to generate one from
         # it's attributes, if this fails, then raise an error.
-        unless path = record.path
+        unless old_path = record.path
           new_path = self.generate_path(record)
           raise ActiveFileError.new("This #{record.class} #{record} has no path, and it was "+
                                     "impossible to generate one based upon it's attributes.") unless new_path
         else # if record does have a path then update it
-          match = path.match(@location_regexp)
+          match = old_path.match(@location_regexp)
           new_path = ""
           previous_end = 0
           @location_attributes.each_with_index do |attribute, index|
             index += 1
             re_start = match.begin(index)
-            new_path << 
+            new_path <<
               if previous_end == re_start
                 ""
               else
-                path[(previous_end..(re_start - 1))]
+                old_path[(previous_end..(re_start - 1))]
               end <<
-              record.send(attribute)
+              # if the attributes exists, then use it otherwise take
+              # what was in the path
+              (record.send(attribute) or old_path[(re_start..(match.end(index) - 1))])
             previous_end = match.end(index)
           end
-          new_path << path[(previous_end..-1)]
+          new_path << old_path[(previous_end..-1)]
         end
         # move object to the location of the new path
         record.path = new_path
         new_path
       end
       alias :refresh_path :update_path
-      
+
       # Generate a new path for record based on it's attributes,
       # otherwise return nil if this is not possible.  This method
       # should be overwritten when new behavior is desired.
@@ -354,13 +319,13 @@ module ActiveFile
                            end
         new_path
       end
-      
+
       # write the record to the file system
       def write(record)
         record.path = self.update_path(record)
         FileUtils.mkdir_p(File.dirname(record.path))
         if self.directory?
-          File.mkdir(record.path)
+          FileUtils.mkdir(record.path) unless File.exist?(record.path)
         else
           File.open(self.expand(record.path), "w"){|f| f << record.body}
         end
@@ -372,7 +337,7 @@ module ActiveFile
         if self.exist?(path)
           object = self.instantiate(path)
           if self.directory?
-            File.rmdir(self.expand(path))
+            FileUtils.rmdir(self.expand(path))
           else
             File.delete(self.expand(path))
           end
@@ -441,6 +406,60 @@ module ActiveFile
 
     #--------------------------------------------------------------------------------
     # Instance Methods
+    attr_accessor :body, :attributes
+    @path
+    def path() @path end
+
+    def path=(new_path)
+      raise ActiveFileError.new("path #{new_path} doesn't match the location "+
+                                "[#{self.base.location.join(", ")}]") unless
+        new_path.match(self.class.location_regexp)
+      @path = new_path
+      self.attributes = self.class.generate_attributes(@path)
+      self
+    end
+
+    # create (but don't save) and return a new instance
+    def initialize(attributes = {})
+      self.attributes = self.class.generate_attributes(attributes[:path])
+      self.apply_attributes(attributes)
+    end
+
+    def update_attributes(attributes = {})
+      old_path = self.path
+      self.apply_attributes(attributes)
+      self.class.delete(old_path)
+      self.write
+    end
+
+    def apply_attributes(attributes = {})
+      attributes.each do |key, value|
+        self.send("#{key}=", value) if (self.respond_to?("#{key}=") or
+                                        self.class.location_attributes.include?(key.to_s.intern))
+      end
+      self
+    end
+
+    # dynamically add methods attr_accessor type methods for every key
+    # in the attributes hash
+    def method_missing(id, *args)
+      set = id.to_s.include?("=")
+
+      if @attributes.keys.include?(id)
+        # if we can return an attribute
+        @attributes[id]
+      elsif (new_id = id.to_s.sub("=","").intern and @attributes.keys.include?(new_id))
+        # elsif we can set an attribute
+        @attributes[id] = args[0]
+        self.path = self.class.refresh_path(self) if
+          (self.path or self.class.generate_path(self))
+      elsif (self.class.directory? and Dir.public_methods.include?(id))
+        # elsif we can call a directory method
+
+      else
+        super(id, args)
+      end
+    end
 
     # return path for id since that is our unique identifier
     def id() self.to_s end
@@ -467,7 +486,7 @@ module ActiveFile
     def inspect
       "#<#{self.class}:'#{self.path}' #{self.attributes.map{|key, value| "#{key}=#{value}"}.join(", ")}>"
     end
-    
+
     # Used by the Rails url_for url path generation in view helpers
     def to_s()
       # escape an ActiveFile id (which is actually a file path) so
@@ -481,27 +500,27 @@ module ActiveFile
         end
       end
     end
-    
+
     # Indicate if self has been saved yet or is new (used by form_for etc...)
     def new_record?() not self.path end
-    
+
   end
-  
+
   # =Associations between ActiveFile and ActiveFile
-  # 
+  #
   # Associations for ActiveFile records, first lets get associations
   # working between ActiveFile records.
-  # 
+  #
   #  has_one :target, :at => :field
   #
   # where :field is the name of an attribute on the object which has
   # the relation.  So for example say you have the following
   # ActiveFile object
-  # 
+  #
   #  class Doc << ActiveFile::Base
   #     self.base_directory = File.join("RAILS_ROOT", "projects")
   #     self.location = [:project_name, :name, :extension]
-  #     
+  #
   #     belongs_to :project, :from => :project_name, :to => :name
   #  end
   #
@@ -518,13 +537,13 @@ module ActiveFile
   # add the following line
   #
   #  belongs_to :project, :from => :project_name, :to => :name
-  # 
+  #
   # ActiveFile will then intercept calls to doc.project, and will call
   # Project.find(:name => doc.project_name) and return the related
   # project.
   #
   # =Association between ActiveFile and ActiveRecord
-  # 
+  #
   # then maybe we can provide an optional argument to association
   # calls inside ActiveRecord objects which will then intercept the
   # call and implement it as an ActiveFile association
@@ -532,20 +551,20 @@ module ActiveFile
     def self.included(base)
       base.extend ActiveFile::Associations
     end
-    
+
     def has_many(referent, options = {})
       verify_options(options)
       build_relation(referent, false, options)
     end
     alias :has_multiple :has_many
-    
+
     def has_one(referent, options = {})
       verify_options(options)
       build_relation(referent, true, options)
     end
     alias :belongs_to :has_one
     alias :has_single :has_one
-    
+
     def build_relation(referent, singular_p, options = {})
       self.class_eval <<DEFUN
 def #{singular_p ? referent.to_s : referent.to_s.pluralize}()
@@ -554,13 +573,13 @@ def #{singular_p ? referent.to_s : referent.to_s.pluralize}()
 end
 DEFUN
     end
-    
+
     private
-    
+
     def verify_options(options = {})
       raise ActiveFileAssociationError.new("did not specify :from or :to field") unless
         options.keys.include?(:from) and options.keys.include?(:to)
     end
   end
-  
+
 end
