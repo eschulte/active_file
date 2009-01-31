@@ -16,6 +16,11 @@ To install, run the following from inside of your rails project.
 
 > ruby script/plugin install git://github.com/eschulte/active_file.git
 
+Or if you are using git for version control and you'd rather include
+this as a submodule execute the following
+
+> git submodule add git://github.com/eschulte/active\_file.git vendor/plugins/active\_file.git
+
 Example
 =======
 
