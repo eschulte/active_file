@@ -80,7 +80,9 @@ module ActiveFile
   class ActiveFileAssociationError < StandardError
   end
 
-  class Base < Dir
+  class Base
+    include ActiveSupport::Callbacks
+    
     # used when converting paths to id's for use in url construction
     ACTIVEFILE_EXTENSION_ALT = "_"
 
@@ -164,13 +166,12 @@ module ActiveFile
       def base_directory=(directory)
         FileUtils.mkdir_p(directory)
         raise ActiveFileError.new("#{directory} is not a directory") unless FileTest.directory?(directory)
-        self.chdir(directory)
         @base_directory = directory
       end
       def base_directory() @base_directory end
 
-      # Expand path to the absolute path inside of DOCUMENT_ROOT.  The
-      # resulting path is used directly for creating, reading,
+      # Expand path to the absolute path inside of the base_directory.
+      # The resulting path is used directly for creating, reading,
       # updating and deleting files.
       def expand(path) File.join(self.base_directory, path) end
 
@@ -213,17 +214,20 @@ module ActiveFile
 
       # return all instances of this class
       def find_all(options = {})
-        all = self.glob(@location_glob).map{|path| self.instance(path)}
+        globbed = []
+        Dir.chdir(self.base_directory) do
+          globbed = Dir.glob(@location_glob).map{|path| self.instance(path)}
+        end
         if conds = options[:conditions]
           matches = conds.keys.size
-          all.select do |record|
+          globbed.select do |record|
             # matches every key, value pair in the conditions
             conds.keys.select do |key|
               record.send(key) == conds[key]
             end.size == matches
           end
         else
-          all
+          globbed
         end
       end
 
@@ -392,13 +396,6 @@ module ActiveFile
                                     "doesn't match #{@location_regexp}")
         end
 
-        ## hooks
-        if object.respond_to?(:after_find)
-          object.send(:callback, :after_find)
-        end
-        if object.respond_to?(:after_initialize)
-          object.send(:callback, :after_initialize)
-        end
         object
       end
 
@@ -409,7 +406,8 @@ module ActiveFile
     attr_accessor :body, :attributes
     @path
     def path() @path end
-
+    def full_path() self.class.expand(@path) end
+    
     def path=(new_path)
       raise ActiveFileError.new("path #{new_path} doesn't match the location "+
                                 "[#{self.base.location.join(", ")}]") unless
@@ -418,7 +416,9 @@ module ActiveFile
       self.attributes = self.class.generate_attributes(@path)
       self
     end
-
+    
+    define_callbacks :before_write, :after_write
+    
     # create (but don't save) and return a new instance
     def initialize(attributes = {})
       self.attributes = self.class.generate_attributes(attributes[:path])
@@ -460,12 +460,16 @@ module ActiveFile
         super(id, args)
       end
     end
-
+    
     # return path for id since that is our unique identifier
     def id() self.to_s end
 
     # write the body of self to the file specified by name
-    def write() self.class.write(self) end
+    def write()
+      run_callbacks(:before_write)
+      self.class.write(self)
+      run_callbacks(:after_write)
+    end
     alias :save :write
 
     # delete the file holding self, and return self if successful
