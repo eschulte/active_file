@@ -133,7 +133,7 @@ module ActiveFile
                                 end) +
                                  (if part.class == Symbol
                                     @location_attributes << part
-                                    "(.+)"
+                                    "([^/]+)"
                                   elsif part == "**"
                                     maybe = true
                                     ".*?"
