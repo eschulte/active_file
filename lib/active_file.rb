@@ -208,10 +208,25 @@ module ActiveFile
         elsif spec.class == Hash
           self.find_all(spec)
         elsif spec.class == String
-          self.get(spec)
+          atted = self.at(spec)
+          (atted.size > 0) ? atted : self.get(spec)
         end
       end
-
+      
+      def glob(path)
+        globbed = []
+        Dir.chdir(self.base_directory) { globbed = Dir.glob(File.join(path, "**", "*")) }
+        globbed
+      end
+      
+      # return all instances which are located at the supplied path
+      def at(path)
+        self.glob(path).
+          select{|path| self.exist?(path)}.
+          select{|path| path.match(self.location_regexp)}.
+          map{|path| self.instance(path)}
+      end
+      
       # return all instances of this class
       def find_all(options = {})
         globbed = []
