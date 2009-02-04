@@ -82,7 +82,7 @@ module ActiveFile
 
   class Base
     include ActiveSupport::Callbacks
-    
+
     # used when converting paths to id's for use in url construction
     ACTIVEFILE_EXTENSION_ALT = "_"
 
@@ -124,7 +124,8 @@ module ActiveFile
                              ""
                            end))
         maybe = false
-        @location_regexp = ((@location.map do |part|
+        @location_regexp = ("^" +
+                            (@location.map do |part|
                                (if maybe
                                   maybe = false
                                   "?"
@@ -152,7 +153,7 @@ module ActiveFile
                                "\\.#{@extension}"
                              else
                                ""
-                             end))
+                             end) + "$")
       end
       def location() @location end
       def extension() @extension end
@@ -199,7 +200,8 @@ module ActiveFile
       def all() self.find(:all) end
       def first() self.find(:first) end
 
-      # TODO: document
+      # by hook or by crook return one or all instances located near
+      # or at spec
       def find(spec, options = {})
         if spec == :all
           self.find_all(options)
@@ -209,16 +211,22 @@ module ActiveFile
           self.find_all(spec)
         elsif spec.class == String
           atted = self.at(spec)
-          (atted.size > 0) ? atted : self.get(spec)
+          if atted.size > 0
+            (atted.size == 1) ? atted.first : atted
+          elsif spec.match(self.location_regexp)
+            self.get(spec)
+          end
         end
       end
-      
-      def glob(path)
+
+      # Search for *any* files in self.base_directory using Dir.glob
+      def glob(path_glob)
         globbed = []
-        Dir.chdir(self.base_directory) { globbed = Dir.glob(File.join(path, "**", "*")) }
+        Dir.chdir(self.base_directory) { globbed = Dir.glob(path_glob + "*") }
+        Dir.chdir(self.base_directory) { globbed += Dir.glob(File.join(path_glob, "**", "*")) }
         globbed
       end
-      
+
       # return all instances which are located at the supplied path
       def at(path)
         self.glob(path).
@@ -226,7 +234,7 @@ module ActiveFile
           select{|path| path.match(self.location_regexp)}.
           map{|path| self.instance(path)}
       end
-      
+
       # return all instances of this class
       def find_all(options = {})
         globbed = []
@@ -387,7 +395,6 @@ module ActiveFile
         object = self.allocate
         object.attributes = self.generate_attributes(path)
         object.path = path
-
         if self.exist?(path)
           unless self.directory?
             object.body = File.read(self.expand(path))
@@ -400,7 +407,6 @@ module ActiveFile
             FileUtils.touch(self.expand(path))
           end
         end
-
         ## populate location_attributes of object
         if object.path.match(@location_regexp)
           @location_attributes.each do |key|
@@ -410,10 +416,8 @@ module ActiveFile
           raise ActiveFileError.new("ActiveFile #{self.name} invalid path #{self.path} "+
                                     "doesn't match #{@location_regexp}")
         end
-
         object
       end
-
     end
 
     #--------------------------------------------------------------------------------
@@ -422,7 +426,7 @@ module ActiveFile
     @path
     def path() @path end
     def full_path() self.class.expand(@path) end
-    
+
     def path=(new_path)
       raise ActiveFileError.new("path #{new_path} doesn't match the location "+
                                 "[#{self.base.location.join(", ")}]") unless
@@ -431,9 +435,9 @@ module ActiveFile
       self.attributes = self.class.generate_attributes(@path)
       self
     end
-    
+
     define_callbacks :before_write, :after_write
-    
+
     # create (but don't save) and return a new instance
     def initialize(attributes = {})
       self.attributes = self.class.generate_attributes(attributes[:path])
@@ -475,7 +479,7 @@ module ActiveFile
         super(id, args)
       end
     end
-    
+
     # return path for id since that is our unique identifier
     def id() self.to_s end
 
@@ -513,7 +517,7 @@ module ActiveFile
       # and turn it into the format of the request.
       if self.path
         if self.path.match("(.+)\\.(.+?)$")
-          $1 + ACTIVEFILE_EXTENSION_ALT + $2
+          $1
         else
           self.path
         end
