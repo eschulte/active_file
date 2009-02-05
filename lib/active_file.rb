@@ -201,7 +201,9 @@ module ActiveFile
       def first() self.find(:first) end
 
       # by hook or by crook return one or all instances located near
-      # or at spec
+      # or at spec.  If neither <tt>:all</tt> or <tt>:first</tt>
+      # options are supplied then this is biased towards only
+      # returning a single result when there is a clear victor.
       def find(spec, options = {})
         if spec == :all
           self.find_all(options)
@@ -212,7 +214,7 @@ module ActiveFile
         elsif spec.class == String
           atted = self.at(spec)
           if atted.size > 0
-            (atted.size == 1) ? atted.first : atted
+            atted.sort_by{|a| a.path.length }.first
           elsif spec.match(self.location_regexp)
             self.get(spec)
           end
@@ -458,7 +460,12 @@ module ActiveFile
       end
       self
     end
-
+    
+    def entries
+      Dir.entries(File.join(self.class.base_directory,
+                            self.class.directory? ? self.path : File.dirname(self.path)))
+    end
+    
     # dynamically add methods attr_accessor type methods for every key
     # in the attributes hash
     def method_missing(id, *args)
@@ -472,9 +479,6 @@ module ActiveFile
         @attributes[id] = args[0]
         self.path = self.class.refresh_path(self) if
           (self.path or self.class.generate_path(self))
-      elsif (self.class.directory? and Dir.public_methods.include?(id))
-        # elsif we can call a directory method
-
       else
         super(id, args)
       end
