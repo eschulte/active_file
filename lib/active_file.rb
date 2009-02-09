@@ -211,12 +211,12 @@ module ActiveFile
           self.find_all(options).first
         elsif spec.class == Hash
           self.find_all(spec)
-        elsif spec.class == String
-          atted = self.at(spec)
-          if atted.size > 0
-            atted.sort_by{|a| a.path.length }.first
-          elsif spec.match(self.location_regexp)
-            self.get(spec)
+        elsif spec.class == String or spec.class == Symbol
+          atted = self.at(spec.to_s)
+          if atted.size == 1
+            atted.first
+          elsif spec.to_s.match(self.location_regexp)
+            self.get(spec.to_s)
           end
         end
       end
@@ -266,12 +266,12 @@ module ActiveFile
       end
 
       # update the contents of the object located at path with the
-      # information stored in attributes, then write the object out to
+      # information stored in attributes, then save the object out to
       # the file system
       def update(path, attributes = {})
         object = self.instantiate(path)
         attributes.each{ |key, value| object.send(key.to_s+"=", value) if object.respond_to?(key) }
-        self.write(object)
+        self.save(object)
         object
       end
 
@@ -287,7 +287,7 @@ module ActiveFile
 
       # Update record's path based on the value of
       # location_attributes.  Will delete record from the old path,
-      # and write it to the new path.  This method should only be
+      # and save it to the new path.  This method should only be
       # called if object already has a path.
       def update_path(record)
         # If record doesn't have a path, then try to generate one from
@@ -349,17 +349,20 @@ module ActiveFile
         new_path
       end
 
-      # write the record to the file system
-      def write(record)
+      # save the record to the file system
+      def save(record)
         record.path = self.update_path(record)
-        FileUtils.mkdir_p(File.dirname(record.path))
+        FileUtils.mkdir_p(File.dirname(record.full_path))
         if self.directory?
-          FileUtils.mkdir(record.path) unless File.exist?(record.path)
+          if (File.exist?(record.full_path) or FileUtils.mkdir(record.full_path))
+            record
+          end
         else
-          File.open(self.expand(record.path), "w"){|f| f << record.body}
+          if File.open(record.full_path, "w"){|f| f << record.body}
+            record
+          end
         end
       end
-      alias :save :write
 
       # delete the file at location
       def delete(path)
@@ -438,7 +441,7 @@ module ActiveFile
       self
     end
 
-    define_callbacks :before_write, :after_write
+    # define_callbacks :before_save, :after_save
 
     # create (but don't save) and return a new instance
     def initialize(attributes = {})
@@ -450,7 +453,7 @@ module ActiveFile
       old_path = self.path
       self.apply_attributes(attributes)
       self.class.delete(old_path)
-      self.write
+      self.save
     end
 
     def apply_attributes(attributes = {})
@@ -461,9 +464,11 @@ module ActiveFile
       self
     end
     
-    def entries
-      Dir.entries(File.join(self.class.base_directory,
-                            self.class.directory? ? self.path : File.dirname(self.path)))
+    def entries(dir = nil)
+      directory = File.join(self.class.base_directory,
+                            (self.class.directory? ? self.path : File.dirname(self.path)),
+                            (dir ? dir : ""))
+      Dir.entries(directory) if File.directory?(directory)
     end
     
     # dynamically add methods attr_accessor type methods for every key
@@ -487,13 +492,8 @@ module ActiveFile
     # return path for id since that is our unique identifier
     def id() self.to_s end
 
-    # write the body of self to the file specified by name
-    def write()
-      run_callbacks(:before_write)
-      self.class.write(self)
-      run_callbacks(:after_write)
-    end
-    alias :save :write
+    # save the body of self to the file specified by name
+    def save() self.class.save(self) end
 
     # delete the file holding self, and return self if successful
     def destroy() self.class.delete(self.path) end
