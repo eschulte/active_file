@@ -76,7 +76,11 @@ module ActiveFile
   # Generic Active File exception class.
   class ActiveFileError < StandardError
   end
-
+  
+  # handle errors like ActiveRecord
+  class Errors < ActiveRecord::Errors
+  end
+  
   class ActiveFileAssociationError < StandardError
   end
 
@@ -363,6 +367,7 @@ module ActiveFile
           end
         end
       end
+      alias :save! :save
 
       # delete the file at location
       def delete(path)
@@ -423,6 +428,10 @@ module ActiveFile
         end
         object
       end
+      
+      # less consequential methods
+      def human_attribute_name(name, options = {}) name.humanize end
+      
     end
 
     #--------------------------------------------------------------------------------
@@ -494,6 +503,7 @@ module ActiveFile
 
     # save the body of self to the file specified by name
     def save() self.class.save(self) end
+    alias :save! :save
 
     # delete the file holding self, and return self if successful
     def destroy() self.class.delete(self.path) end
@@ -530,7 +540,12 @@ module ActiveFile
 
     # Indicate if self has been saved yet or is new (used by form_for etc...)
     def new_record?() not self.path end
-
+    
+    # This does nothing aside from satisfy ActiveRecord::Errors
+    def update_attribute() end
+    
+    # include after we've defined all of the required methods
+    include ActiveRecord::Validations
   end
 
   # =Associations between ActiveFile and ActiveFile
