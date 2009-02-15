@@ -29,3 +29,5 @@ METHOD_OVERRIDE
     )
     end
 end
+
+ActionView::Base.send :include, ActiveFileHelper
