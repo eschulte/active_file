@@ -143,8 +143,12 @@ module ActiveFile
           atted = self.at(spec.to_s)
           if atted.size == 1
             atted.first
-          elsif spec.to_s.match(self.location_regexp)
+          elsif spec.to_s.match(self.location_regexp) and self.exist?(spec.to_s)
             self.get(spec.to_s)
+          elsif (@extension and
+                 (spec.to_s + "." + @extension).to_s.match(self.location_regexp) and
+                 (self.exist?(spec.to_s + "." + @extension)))
+            self.get(spec.to_s + "." + @extension)
           end
         end
       end
