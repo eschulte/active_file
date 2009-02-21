@@ -2,7 +2,7 @@ module ActiveFile
 
   # for acts as stuffs
   module Acts end
-  
+
   # Generic Active File exception class.
   class ActiveFileError < StandardError
   end
@@ -12,9 +12,6 @@ module ActiveFile
 
   class Base
     include ActiveSupport::Callbacks
-    
-    # used when converting paths to id's for use in url construction
-    ACTIVEFILE_EXTENSION_ALT = "_"
 
     # hook run whenever a new class inherits from ActiveFile::Base
     def self.inherited(base)
@@ -118,17 +115,16 @@ module ActiveFile
       # like ActiveRecord.find, if there is an instance with the given
       # file name then return it, otherwise return false
       def instance(path)
-        if self.exist?(path)
-          self.instantiate(path)
-        elsif path.match("(.+)"+Regexp.quote(ACTIVEFILE_EXTENSION_ALT)+"(.+?)$")
-          path = $1 + "." + $2
-          self.instantiate(path) if self.exist?(path)
-        end
+        raise ActiveFileError.new("ActiveFile::RecordNotFound: Couldn't find #{self.name} at path=#{path}") unless self.exist?(path)
+        object = self.instantiate(path)
+        object.new_p = false
+        object
       end
       alias :get :instance
 
       def all() self.find(:all) end
       def first() self.find(:first) end
+      def last() self.find(:last) end
 
       # by hook or by crook return one or all instances located near
       # or at spec.  If neither <tt>:all</tt> or <tt>:first</tt>
@@ -139,6 +135,8 @@ module ActiveFile
           self.find_all(options)
         elsif spec == :first
           self.find_all(options).first
+        elsif spec == :last
+          self.find_all(options).last
         elsif spec.class == Hash
           self.find_all(spec)
         elsif spec.class == String or spec.class == Symbol
@@ -224,8 +222,11 @@ module ActiveFile
         # it's attributes, if this fails, then raise an error.
         unless old_path = record.path
           new_path = self.generate_path(record)
-          raise ActiveFileError.new("This #{record.class} #{record} has no path, and it was "+
-                                    "impossible to generate one based upon it's attributes.") unless new_path
+          unless new_path
+            record.errors.add_to_base("This #{record.class} #{record} has no path, and it was "+
+                                      "impossible to generate one based upon it's attributes.")
+            return false
+          end
         else # if record does have a path then update it
           match = old_path.match(@location_regexp)
           new_path = ""
@@ -281,18 +282,25 @@ module ActiveFile
 
       # save the record to the file system
       def save(record)
+        if (record.new_p and self.exist?(record.path))
+          record.errors.add_to_base("A #{self.name} already exists at path='#{record.path}'")
+          return false
+        end
         record.path = self.update_path(record)
         FileUtils.mkdir_p(File.dirname(record.full_path))
         if self.directory?
           if (File.exist?(record.full_path) or FileUtils.mkdir(record.full_path))
+            record.new_p = false
             record
           end
         else
           if File.open(record.full_path, "w"){|f| f << record.body}
+            record.new_p = false
             record
           end
         end
       end
+      alias save! save
 
       # delete the file at location
       def delete(path)
@@ -305,7 +313,7 @@ module ActiveFile
           end
           object
         else
-          raise ActiveFileError.new("ActiveFile #{self.name} #{path} doesn't exist")
+          raise ActiveFileError.new("ActiveFile::RecordNotFound: Couldn't find #{self.name} with path=#{path}")
         end
       end
 
@@ -348,8 +356,9 @@ module ActiveFile
             object
           end
         else
-          raise ActiveFileError.new("ActiveFile #{self.name} invalid path #{self.path} "+
+          object.errors.add_to_base("ActiveFile #{self.name} invalid path #{self.path} "+
                                     "doesn't match #{@location_regexp}")
+          false
         end
         object
       end
@@ -357,10 +366,13 @@ module ActiveFile
 
     #--------------------------------------------------------------------------------
     # Instance Methods
-    attr_accessor :body, :attributes
+    attr_accessor :body, :attributes, :new_p
     @path
     def path() @path end
-    def full_path() self.class.expand(@path) end
+    def full_path()
+      return nil unless @path
+      self.class.expand(@path)
+    end
 
     def path=(new_path)
       raise ActiveFileError.new("path #{new_path} doesn't match the location "+
@@ -375,6 +387,7 @@ module ActiveFile
 
     # create (but don't save) and return a new instance
     def initialize(attributes = {})
+      self.new_p = true
       self.attributes = self.class.generate_attributes(attributes[:path])
       self.apply_attributes(attributes)
     end
@@ -386,6 +399,11 @@ module ActiveFile
       self.save
     end
 
+    def update_attribute(name, value)
+      self.send("#{name}=", value) if (self.respond_to?("#{key}=") or
+                                       self.class.location_attributes.include?(key.to_s.intern))
+    end
+
     def apply_attributes(attributes = {})
       attributes.each do |key, value|
         self.send("#{key}=", value) if (self.respond_to?("#{key}=") or
@@ -393,14 +411,14 @@ module ActiveFile
       end
       self
     end
-    
+
     def entries(dir = nil)
       directory = File.join(self.class.base_directory,
                             (self.class.directory? ? self.path : File.dirname(self.path)),
                             (dir ? dir : ""))
       Dir.entries(directory) if File.directory?(directory)
     end
-    
+
     # dynamically add methods attr_accessor type methods for every key
     # in the attributes hash
     def method_missing(id, *args)
@@ -424,6 +442,7 @@ module ActiveFile
 
     # save the body of self to the file specified by name
     def save() self.class.save(self) end
+    alias :save! :save
 
     # delete the file holding self, and return self if successful
     def destroy() self.class.delete(self.path) end
@@ -460,5 +479,8 @@ module ActiveFile
 
     # Indicate if self has been saved yet or is new (used by form_for etc...)
     def new_record?() not self.path end
+
+    # error handling like ActiveRecord
+    include ActiveRecord::Validations
   end
 end

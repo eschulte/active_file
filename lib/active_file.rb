@@ -73,8 +73,8 @@ module ActiveFile; end
 $:.unshift(File.dirname(__FILE__)) unless
   $:.include?(File.dirname(__FILE__)) || $:.include?(File.expand_path(File.dirname(__FILE__)))
 
-require 'active_record/base'
-require 'active_record/associations'
+require 'active_file/base'
+require 'active_file/associations'
 
 ActiveFile::Base.class_eval do
   include ActiveFile::Associations
