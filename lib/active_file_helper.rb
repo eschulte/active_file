@@ -33,7 +33,7 @@ module ActiveFileHelper
 
   def af_path(action, af, options = {})
     options = {:controller => af.class.name.tableize}.merge(options)
-    path = ["", options.delete(:controller).to_s, action.to_s, af.to_s].join("/")
+    path = ["", options.delete(:controller), action, af].compact.map(&:to_s).join("/")
     path = force_extension(path, options.delete(:format)) if options.keys.include?(:format)
     if options.size > 0
       path + "?" + options.map{ |key, value| "#{key}=#{value}" }.join("&")
