@@ -30,7 +30,7 @@ module ActiveFileHelper
   def af_id()
     params[:rest].join("/")
   end
-
+  
   def af_path(action, af, options = {})
     options = {:controller => af.class.name.tableize}.merge(options)
     path = ["", options.delete(:controller), action, af].compact.map(&:to_s).join("/")

@@ -1,5 +1,5 @@
 # require ActiveFile
-require 'active_file'
+require File.join(File.dirname(__FILE__), 'lib', 'active_file')
 
 # Add associations to ActiveFile
 ActiveFile::Base.send(:include, ActiveFile::Associations)
@@ -30,8 +30,12 @@ METHOD_OVERRIDE
     end
 end
 
-ActionView::Base.send :include, ActiveFileHelper
-
-class ApplicationController
-  include ActiveFileHelper
+if defined?(ActionView::Base)
+  ActionView::Base.send :include, ActiveFileHelper
+  
+  class ApplicationController
+    include ActiveFileHelper
+  end
+else
+  require File.join(File.dirname(__FILE__), 'lib', 'active_file_helper')
 end

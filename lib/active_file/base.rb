@@ -18,7 +18,7 @@ module ActiveFile
       # set the default location (for use if none is specified)
       base.location = [base.name.tableize.to_s, "*"]
       # set the default base_directory (for use if none is specified)
-      base.base_directory = (File.join(RAILS_ROOT, "db", "files"))
+      # base.base_directory = (File.join(RAILS_ROOT, "db", "files"))
     end
 
     # Class methods
@@ -171,10 +171,7 @@ module ActiveFile
 
       # return all instances of this class
       def find_all(options = {})
-        globbed = []
-        Dir.chdir(self.base_directory) do
-          globbed = Dir.glob(@location_glob).map{|path| self.instance(path)}
-        end
+        globbed = Dir.chdir(self.base_directory){ Dir.glob(@location_glob) }.map{ |path| self.instance(path) }
         if conds = options[:conditions]
           matches = conds.keys.size
           globbed.select do |record|
