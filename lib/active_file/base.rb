@@ -61,12 +61,12 @@ module ActiveFile
                                 end) +
                                  (if part.class == Symbol
                                     @location_attributes << part
-                                    "([^/]+)"
+                                    "([^/.][^/]*)"
                                   elsif part == "**"
                                     maybe = true
-                                    ".*?"
+                                    "([^.].*)?"
                                   elsif part == "*"
-                                    ".*"
+                                    "[^.].*"
                                   else
                                     part
                                   end)
@@ -106,6 +106,12 @@ module ActiveFile
       # check if a file exists at location
       def exist?(path) path if File.exist?(self.expand(path)) end
 
+      # if path is a directory then return it's
+      def entries(path)
+        full_path = self.expand(path)
+        Dir.new(full_path).entries if FileTest.directory?(full_path)
+      end
+      
       # return the time the file at path was created
       def ctime(path) File.ctime(self.expand(path)) if self.exist?(path) end
 
