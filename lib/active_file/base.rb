@@ -55,7 +55,7 @@ module ActiveFile
                             (@location.map do |part|
                                (if maybe
                                   maybe = false
-                                  "?"
+                                  ")?"
                                 else
                                   ""
                                 end) +
@@ -63,8 +63,9 @@ module ActiveFile
                                     @location_attributes << part
                                     "([^/.][^/]*)"
                                   elsif part == "**"
+                                    @location_attributes << :**
                                     maybe = true
-                                    "([^.].*)?"
+                                    "([^.].*"
                                   elsif part == "*"
                                     "[^.].*"
                                   else
