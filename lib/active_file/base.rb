@@ -107,10 +107,9 @@ module ActiveFile
       # check if a file exists at location
       def exist?(path) path if File.exist?(self.expand(path)) end
 
-      # if path is a directory then return it's
+      # return the ls of path's directory
       def entries(path)
-        full_path = self.expand(path)
-        Dir.new(full_path).entries if FileTest.directory?(full_path)
+        Dir.entries(File.directory?(self.expand(path)) ? self.expand(path) : File.dirname(self.expand(path)))
       end
       
       # return the time the file at path was created
@@ -240,18 +239,20 @@ module ActiveFile
           new_path = ""
           previous_end = 0
           @location_attributes.each_with_index do |attribute, index|
-            index += 1
-            re_start = match.begin(index)
-            new_path <<
-              if previous_end == re_start
-                ""
-              else
-                old_path[(previous_end..(re_start - 1))]
-              end <<
-              # if the attributes exists, then use it otherwise take
-              # what was in the path
-              (record.send(attribute) or old_path[(re_start..(match.end(index) - 1))])
-            previous_end = match.end(index)
+            unless attribute == :**
+                index += 1
+              re_start = match.begin(index)
+              new_path <<
+                if previous_end == re_start
+                  ""
+                else
+                  old_path[(previous_end..(re_start - 1))]
+                end <<
+                # if the attributes exists, then use it otherwise take
+                # what was in the path
+                (record.send(attribute) or old_path[(re_start..(match.end(index) - 1))])
+              previous_end = match.end(index)
+            end
           end
           new_path << old_path[(previous_end..-1)]
         end
