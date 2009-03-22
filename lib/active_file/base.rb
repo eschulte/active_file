@@ -490,6 +490,6 @@ module ActiveFile
     def new_record?() not self.path end
 
     # error handling like ActiveRecord
-    include ActiveRecord::Validations
+    include ActiveRecord::Validations if defined?(ActiveRecord::Validations)
   end
 end
