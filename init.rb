@@ -4,9 +4,8 @@ require File.join(File.dirname(__FILE__), 'lib', 'active_file')
 # Add associations to ActiveFile
 ActiveFile::Base.send(:include, ActiveFile::Associations)
 
-if defined?(ActiveRecord)
-  # Add associations to ActiveRecord
-  module ActiveRecord::Associations::ClassMethods
+# Add associations to ActiveRecord
+module ActiveRecord::Associations::ClassMethods
     %w{has_many has_one}.each do |meth|
       eval(<<METHOD_OVERRIDE
     # intercepting the #{meth} method to add the :as_active_file option
@@ -18,18 +17,17 @@ if defined?(ActiveRecord)
         self.class_eval <<DEFUN
 def #{meth == "has_one" ? "\#{name.to_s}" : "\#{name.to_s.pluralize}"}()
   \#{(options[:class] or name).to_s.classify}.
-  find(:#{meth == "has_one" ? :first : :all},
-       :conditions => {:\#{options[:to]} => self.send(:\#{options[:from]})})
-       end
-       DEFUN
-     else
-       orig_#{meth}(name, options)
-     end
+    find(:#{meth == "has_one" ? :first : :all},
+         :conditions => {:\#{options[:to]} => self.send(:\#{options[:from]})})
+end
+DEFUN
+      else
+        orig_#{meth}(name, options)
+      end
     end
 METHOD_OVERRIDE
     )
     end
-  end
 end
 
 if defined?(ActionView::Base)
