@@ -11,8 +11,6 @@ module ActiveFile
   end
 
   class Base
-    include ActiveSupport::Callbacks
-
     # hook run whenever a new class inherits from ActiveFile::Base
     def self.inherited(base)
       # set the default location (for use if none is specified)
@@ -230,8 +228,8 @@ module ActiveFile
         unless old_path = record.path
           new_path = self.generate_path(record)
           unless new_path
-            record.errors.add_to_base("This #{record.class} #{record} has no path, and it was "+
-                                      "impossible to generate one based upon it's attributes.")
+            record.errors << ("This #{record.class} #{record} has no path, and it was "+
+                              "impossible to generate one based upon it's attributes.")
             return false
           end
         else # if record does have a path then update it
@@ -292,7 +290,7 @@ module ActiveFile
       # save the record to the file system
       def save(record)
         if (record.new_p and self.exist?(record.path))
-          record.errors.add_to_base("A #{self.name} already exists at path='#{record.path}'")
+          record.errors << ("A #{self.name} already exists at path='#{record.path}'")
           return false
         end
         record.path = self.update_path(record)
@@ -365,8 +363,8 @@ module ActiveFile
             object
           end
         else
-          object.errors.add_to_base("ActiveFile #{self.name} invalid path #{self.path} "+
-                                    "doesn't match #{@location_regexp}")
+          object.errors << ("ActiveFile #{self.name} invalid path #{self.path} "+
+                            "doesn't match #{@location_regexp}")
           false
         end
         object
@@ -375,7 +373,7 @@ module ActiveFile
 
     #--------------------------------------------------------------------------------
     # Instance Methods
-    attr_accessor :body, :attributes, :new_p
+    attr_accessor :body, :attributes, :new_p, :errors
     @path
     def path() @path end
     def full_path()
@@ -392,11 +390,10 @@ module ActiveFile
       self
     end
 
-    # define_callbacks :before_save, :after_save
-
     # create (but don't save) and return a new instance
     def initialize(attributes = {})
       self.new_p = true
+      self.errors = []
       self.attributes = self.class.generate_attributes(attributes[:path])
       self.apply_attributes(attributes)
     end
@@ -489,7 +486,5 @@ module ActiveFile
     # Indicate if self has been saved yet or is new (used by form_for etc...)
     def new_record?() not self.path end
 
-    # error handling like ActiveRecord
-    include ActiveRecord::Validations
   end
 end

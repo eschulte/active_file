@@ -1,11 +1,13 @@
 # require ActiveFile
+require 'active_support'
 require File.join(File.dirname(__FILE__), 'lib', 'active_file')
 
 # Add associations to ActiveFile
 ActiveFile::Base.send(:include, ActiveFile::Associations)
 
 # Add associations to ActiveRecord
-module ActiveRecord::Associations::ClassMethods
+if defined?(ActiveRecord)
+  module ActiveRecord::Associations::ClassMethods
     %w{has_many has_one}.each do |meth|
       eval(<<METHOD_OVERRIDE
     # intercepting the #{meth} method to add the :as_active_file option
@@ -28,6 +30,7 @@ DEFUN
 METHOD_OVERRIDE
     )
     end
+  end
 end
 
 if defined?(ActionView::Base)
