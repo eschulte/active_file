@@ -103,7 +103,7 @@ module ActiveFile
       def expand(path) File.join(self.base_directory, path) end
 
       # check if a file exists at location
-      def exist?(path) path if File.exist?(self.expand(path)) end
+      def exist?(path) path if (File.exist?(self.expand(path)) and (not File.directory?(self.expand(path)))) end
 
       # return the ls of path's directory
       def entries(path)
@@ -175,7 +175,8 @@ module ActiveFile
 
       # return all instances of this class
       def find_all(options = {})
-        globbed = Dir.chdir(self.base_directory){ Dir.glob(@location_glob) }.map{ |path| self.instance(path) }
+        globbed = Dir.chdir(self.base_directory){ Dir.glob(@location_glob) }.
+          select{ |path| self.exist?(path) }.map{ |path| self.instance(path) }
         if conds = options[:conditions]
           matches = conds.keys.size
           globbed.select do |record|
