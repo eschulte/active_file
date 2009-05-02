@@ -75,7 +75,9 @@ $:.unshift(File.dirname(__FILE__)) unless
 
 require 'active_file/base'
 require 'active_file/associations'
+require 'active_file/hooks'
 
 ActiveFile::Base.class_eval do
   include ActiveFile::Associations
+  include ActiveFile::Hooks
 end
