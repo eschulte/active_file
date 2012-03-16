@@ -1,6 +1,7 @@
 # require ActiveFile
 require 'active_support'
 require 'active_support/inflector'
+require 'active_support/core_ext/module'
 require File.join(File.dirname(__FILE__), 'lib', 'active_file')
 
 # Add associations to ActiveFile
